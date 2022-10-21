@@ -1,4 +1,83 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+(function (setImmediate,clearImmediate){(function (){
+var nextTick = require('process/browser.js').nextTick;
+var apply = Function.prototype.apply;
+var slice = Array.prototype.slice;
+var immediateIds = {};
+var nextImmediateId = 0;
+
+// DOM APIs, for completeness
+
+exports.setTimeout = function() {
+  return new Timeout(apply.call(setTimeout, window, arguments), clearTimeout);
+};
+exports.setInterval = function() {
+  return new Timeout(apply.call(setInterval, window, arguments), clearInterval);
+};
+exports.clearTimeout =
+exports.clearInterval = function(timeout) { timeout.close(); };
+
+function Timeout(id, clearFn) {
+  this._id = id;
+  this._clearFn = clearFn;
+}
+Timeout.prototype.unref = Timeout.prototype.ref = function() {};
+Timeout.prototype.close = function() {
+  this._clearFn.call(window, this._id);
+};
+
+// Does not start the time, just sets up the members needed.
+exports.enroll = function(item, msecs) {
+  clearTimeout(item._idleTimeoutId);
+  item._idleTimeout = msecs;
+};
+
+exports.unenroll = function(item) {
+  clearTimeout(item._idleTimeoutId);
+  item._idleTimeout = -1;
+};
+
+exports._unrefActive = exports.active = function(item) {
+  clearTimeout(item._idleTimeoutId);
+
+  var msecs = item._idleTimeout;
+  if (msecs >= 0) {
+    item._idleTimeoutId = setTimeout(function onTimeout() {
+      if (item._onTimeout)
+        item._onTimeout();
+    }, msecs);
+  }
+};
+
+// That's not how node.js implements it but the exposed api is the same.
+exports.setImmediate = typeof setImmediate === "function" ? setImmediate : function(fn) {
+  var id = nextImmediateId++;
+  var args = arguments.length < 2 ? false : slice.call(arguments, 1);
+
+  immediateIds[id] = true;
+
+  nextTick(function onNextTick() {
+    if (immediateIds[id]) {
+      // fn.call() is faster so we optimize for the common use-case
+      // @see http://jsperf.com/call-apply-segu
+      if (args) {
+        fn.apply(null, args);
+      } else {
+        fn.call(null);
+      }
+      // Prevent ids from leaking
+      exports.clearImmediate(id);
+    }
+  });
+
+  return id;
+};
+
+exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate : function(id) {
+  delete immediateIds[id];
+};
+}).call(this)}).call(this,require("timers").setImmediate,require("timers").clearImmediate)
+},{"process/browser.js":5,"timers":1}],2:[function(require,module,exports){
 /*
  * The MIT License (MIT)
  *
@@ -406,7 +485,7 @@ else if (!global.CBOR)
 
 })(this);
 
-},{}],2:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 (function (process,setImmediate){(function (){
 /*!
  * EventEmitter2
@@ -509,7 +588,7 @@ else if (!global.CBOR)
     var obj = {};
     var key;
     var len = keys.length;
-    var valuesCount = values ? value.length : 0;
+    var valuesCount = values ? values.length : 0;
     for (var i = 0; i < len; i++) {
       key = keys[i];
       obj[key] = i < valuesCount ? values[i] : undefined;
@@ -2039,7 +2118,7 @@ else if (!global.CBOR)
 }();
 
 }).call(this)}).call(this,require('_process'),require("timers").setImmediate)
-},{"_process":4,"timers":5}],3:[function(require,module,exports){
+},{"_process":5,"timers":1}],4:[function(require,module,exports){
 /*
 object-assign
 (c) Sindre Sorhus
@@ -2131,7 +2210,7 @@ module.exports = shouldUseNative() ? Object.assign : function (target, source) {
 	return to;
 };
 
-},{}],4:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -2317,86 +2396,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],5:[function(require,module,exports){
-(function (setImmediate,clearImmediate){(function (){
-var nextTick = require('process/browser.js').nextTick;
-var apply = Function.prototype.apply;
-var slice = Array.prototype.slice;
-var immediateIds = {};
-var nextImmediateId = 0;
-
-// DOM APIs, for completeness
-
-exports.setTimeout = function() {
-  return new Timeout(apply.call(setTimeout, window, arguments), clearTimeout);
-};
-exports.setInterval = function() {
-  return new Timeout(apply.call(setInterval, window, arguments), clearInterval);
-};
-exports.clearTimeout =
-exports.clearInterval = function(timeout) { timeout.close(); };
-
-function Timeout(id, clearFn) {
-  this._id = id;
-  this._clearFn = clearFn;
-}
-Timeout.prototype.unref = Timeout.prototype.ref = function() {};
-Timeout.prototype.close = function() {
-  this._clearFn.call(window, this._id);
-};
-
-// Does not start the time, just sets up the members needed.
-exports.enroll = function(item, msecs) {
-  clearTimeout(item._idleTimeoutId);
-  item._idleTimeout = msecs;
-};
-
-exports.unenroll = function(item) {
-  clearTimeout(item._idleTimeoutId);
-  item._idleTimeout = -1;
-};
-
-exports._unrefActive = exports.active = function(item) {
-  clearTimeout(item._idleTimeoutId);
-
-  var msecs = item._idleTimeout;
-  if (msecs >= 0) {
-    item._idleTimeoutId = setTimeout(function onTimeout() {
-      if (item._onTimeout)
-        item._onTimeout();
-    }, msecs);
-  }
-};
-
-// That's not how node.js implements it but the exposed api is the same.
-exports.setImmediate = typeof setImmediate === "function" ? setImmediate : function(fn) {
-  var id = nextImmediateId++;
-  var args = arguments.length < 2 ? false : slice.call(arguments, 1);
-
-  immediateIds[id] = true;
-
-  nextTick(function onNextTick() {
-    if (immediateIds[id]) {
-      // fn.call() is faster so we optimize for the common use-case
-      // @see http://jsperf.com/call-apply-segu
-      if (args) {
-        fn.apply(null, args);
-      } else {
-        fn.call(null);
-      }
-      // Prevent ids from leaking
-      exports.clearImmediate(id);
-    }
-  });
-
-  return id;
-};
-
-exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate : function(id) {
-  delete immediateIds[id];
-};
-}).call(this)}).call(this,require("timers").setImmediate,require("timers").clearImmediate)
-},{"process/browser.js":4,"timers":5}],6:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 function webpackBootstrapFunc (modules) {
 /******/  // The module cache
 /******/  var installedModules = {};
@@ -2712,7 +2712,7 @@ assign(ROSLIB, require('./urdf'));
 
 module.exports = ROSLIB;
 
-},{"./actionlib":14,"./core":23,"./math":28,"./tf":31,"./urdf":43,"object-assign":3}],9:[function(require,module,exports){
+},{"./actionlib":14,"./core":23,"./math":28,"./tf":31,"./urdf":43,"object-assign":4}],9:[function(require,module,exports){
 (function (global){(function (){
 global.ROSLIB = require('./RosLib');
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
@@ -2861,7 +2861,7 @@ ActionClient.prototype.dispose = function() {
 
 module.exports = ActionClient;
 
-},{"../core/Message":15,"../core/Topic":22,"eventemitter2":2}],11:[function(require,module,exports){
+},{"../core/Message":15,"../core/Topic":22,"eventemitter2":3}],11:[function(require,module,exports){
 /**
  * @fileOverview
  * @author Justin Young - justin@oodar.com.au
@@ -2950,7 +2950,7 @@ ActionListener.prototype.__proto__ = EventEmitter2.prototype;
 
 module.exports = ActionListener;
 
-},{"../core/Message":15,"../core/Topic":22,"eventemitter2":2}],12:[function(require,module,exports){
+},{"../core/Message":15,"../core/Topic":22,"eventemitter2":3}],12:[function(require,module,exports){
 /**
  * @fileOverview
  * @author Russell Toris - rctoris@wpi.edu
@@ -3040,7 +3040,7 @@ Goal.prototype.cancel = function() {
 };
 
 module.exports = Goal;
-},{"../core/Message":15,"eventemitter2":2}],13:[function(require,module,exports){
+},{"../core/Message":15,"eventemitter2":3}],13:[function(require,module,exports){
 /**
  * @fileOverview
  * @author Laura Lindzey - lindzey@gmail.com
@@ -3270,7 +3270,7 @@ SimpleActionServer.prototype.setPreempted = function() {
 };
 
 module.exports = SimpleActionServer;
-},{"../core/Message":15,"../core/Topic":22,"eventemitter2":2}],14:[function(require,module,exports){
+},{"../core/Message":15,"../core/Topic":22,"eventemitter2":3}],14:[function(require,module,exports){
 var Ros = require('../core/Ros');
 var mixin = require('../mixin');
 
@@ -3302,7 +3302,7 @@ function Message(values) {
 }
 
 module.exports = Message;
-},{"object-assign":3}],16:[function(require,module,exports){
+},{"object-assign":4}],16:[function(require,module,exports){
 /**
  * @fileoverview
  * @author Brandon Alexander - baalexander@gmail.com
@@ -4088,7 +4088,7 @@ Ros.prototype.getTopicsAndRawTypes = function(callback, failedCallback) {
 
 module.exports = Ros;
 
-},{"../util/workerSocket":49,"./Service":18,"./ServiceRequest":19,"./SocketAdapter.js":21,"eventemitter2":2,"object-assign":3,"ws":46}],18:[function(require,module,exports){
+},{"../util/workerSocket":49,"./Service":18,"./ServiceRequest":19,"./SocketAdapter.js":21,"eventemitter2":3,"object-assign":4,"ws":46}],18:[function(require,module,exports){
 /**
  * @fileoverview
  * @author Brandon Alexander - baalexander@gmail.com
@@ -4213,7 +4213,7 @@ Service.prototype._serviceResponse = function(rosbridgeRequest) {
 
 module.exports = Service;
 
-},{"./ServiceRequest":19,"./ServiceResponse":20,"eventemitter2":2}],19:[function(require,module,exports){
+},{"./ServiceRequest":19,"./ServiceResponse":20,"eventemitter2":3}],19:[function(require,module,exports){
 /**
  * @fileoverview
  * @author Brandon Alexander - balexander@willowgarage.com
@@ -4232,7 +4232,7 @@ function ServiceRequest(values) {
 }
 
 module.exports = ServiceRequest;
-},{"object-assign":3}],20:[function(require,module,exports){
+},{"object-assign":4}],20:[function(require,module,exports){
 /**
  * @fileoverview
  * @author Brandon Alexander - balexander@willowgarage.com
@@ -4251,7 +4251,7 @@ function ServiceResponse(values) {
 }
 
 module.exports = ServiceResponse;
-},{"object-assign":3}],21:[function(require,module,exports){
+},{"object-assign":4}],21:[function(require,module,exports){
 /**
  * Socket event handling utilities for handling events on either
  * WebSocket and TCP sockets
@@ -4384,7 +4384,7 @@ function SocketAdapter(client) {
 
 module.exports = SocketAdapter;
 
-},{"../util/cborTypedArrayTags":44,"../util/decompressPng":48,"cbor-js":1}],22:[function(require,module,exports){
+},{"../util/cborTypedArrayTags":44,"../util/decompressPng":48,"cbor-js":2}],22:[function(require,module,exports){
 /**
  * @fileoverview
  * @author Brandon Alexander - baalexander@gmail.com
@@ -4594,7 +4594,7 @@ Topic.prototype.publish = function(message) {
 
 module.exports = Topic;
 
-},{"./Message":15,"eventemitter2":2}],23:[function(require,module,exports){
+},{"./Message":15,"eventemitter2":3}],23:[function(require,module,exports){
 var mixin = require('../mixin');
 
 var core = module.exports = {
@@ -4963,14 +4963,16 @@ function TFClient(options) {
   this._subscribeCB = null;
   this._isDisposed = false;
 
-  // Create an Action client
-  this.actionClient = new ActionClient({
-    ros : options.ros,
-    serverName : this.serverName,
-    actionName : 'tf2_web_republisher/TFSubscriptionAction',
-    omitStatus : true,
-    omitResult : true
-  });
+  if (this.ros.groovyCompatibility) {
+    // Create an Action client
+    this.actionClient = new ActionClient({
+      ros: options.ros,
+      serverName: this.serverName,
+      actionName: 'tf2_web_republisher/TFSubscriptionAction',
+      omitStatus: true,
+      omitResult: true,
+    });
+  }
 
   // Create a Service client
   this.serviceClient = new Service({
@@ -4990,8 +4992,7 @@ TFClient.prototype.processTFArray = function(tf) {
   var that = this;
   tf.transforms.forEach(function(transform) {
     var frameID = transform.child_frame_id;
-    if (frameID[0] === '/')
-    {
+    if (frameID[0] === '/') {
       frameID = frameID.substring(1);
     }
     var info = this.frameInfos[frameID];
@@ -5033,8 +5034,7 @@ TFClient.prototype.updateGoal = function() {
 
     this.currentGoal.on('feedback', this.processTFArray.bind(this));
     this.currentGoal.send();
-  }
-  else {
+  } else {
     // otherwise, use the service interface
     // The service interface has the same parameters as the action,
     // plus the timeout
@@ -5084,8 +5084,7 @@ TFClient.prototype.processResponse = function(response) {
  */
 TFClient.prototype.subscribe = function(frameID, callback) {
   // remove leading slash, if it's there
-  if (frameID[0] === '/')
-  {
+  if (frameID[0] === '/') {
     frameID = frameID.substring(1);
   }
   // if there is no callback registered for the given frame, create emtpy callback list
@@ -5113,12 +5112,11 @@ TFClient.prototype.subscribe = function(frameID, callback) {
  */
 TFClient.prototype.unsubscribe = function(frameID, callback) {
   // remove leading slash, if it's there
-  if (frameID[0] === '/')
-  {
+  if (frameID[0] === '/') {
     frameID = frameID.substring(1);
   }
   var info = this.frameInfos[frameID];
-  for (var cbs = info && info.cbs || [], idx = cbs.length; idx--;) {
+  for (var cbs = (info && info.cbs) || [], idx = cbs.length; idx--; ) {
     if (cbs[idx] === callback) {
       cbs.splice(idx, 1);
     }
@@ -5400,7 +5398,7 @@ UrdfMaterial.prototype.assign = function(obj) {
 
 module.exports = UrdfMaterial;
 
-},{"./UrdfColor":33,"object-assign":3}],38:[function(require,module,exports){
+},{"./UrdfColor":33,"object-assign":4}],38:[function(require,module,exports){
 /**
  * @fileOverview 
  * @author Benjamin Pitzer - ben.pitzer@gmail.com
@@ -5708,7 +5706,7 @@ module.exports = require('object-assign')({
     UrdfVisual: require('./UrdfVisual')
 }, require('./UrdfTypes'));
 
-},{"./UrdfBox":32,"./UrdfColor":33,"./UrdfCylinder":34,"./UrdfLink":36,"./UrdfMaterial":37,"./UrdfMesh":38,"./UrdfModel":39,"./UrdfSphere":40,"./UrdfTypes":41,"./UrdfVisual":42,"object-assign":3}],44:[function(require,module,exports){
+},{"./UrdfBox":32,"./UrdfColor":33,"./UrdfCylinder":34,"./UrdfLink":36,"./UrdfMaterial":37,"./UrdfMesh":38,"./UrdfModel":39,"./UrdfSphere":40,"./UrdfTypes":41,"./UrdfVisual":42,"object-assign":4}],44:[function(require,module,exports){
 'use strict';
 
 var UPPER32 = Math.pow(2, 32);
